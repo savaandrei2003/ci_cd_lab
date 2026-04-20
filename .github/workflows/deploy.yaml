@@ -8,10 +8,29 @@ on:
       - main
 
 jobs:
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test ./...
   # Job to compile the application
   compile:
     # Specify the Os for the runner (container)
     runs-on: ubuntu-latest  # Use the latest Ubuntu runner
+    needs: test
+    if: success()
 
     steps:
       # Step 1: Checkout the repository code into the runner
@@ -31,3 +50,35 @@ jobs:
       # Step 4: Compile the Go application into a binary named 'myapp'
       - name: Compile binary
         run: go build -o myapp
+
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      packages: write
+
+    needs: compile
+    if: success()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image
+        run: docker build -t ghcr.io/${{ github.repository }}:latest .
+
+      - name: Push Docker image
+        run: docker push ghcr.io/${{ github.repository }}:latest
